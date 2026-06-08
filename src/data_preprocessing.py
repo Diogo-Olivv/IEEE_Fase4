@@ -19,7 +19,8 @@ def preprocess_data(df):
 
 
     # Convert data types
-    binary_cols = ['Partner', 'Dependents', 'PhoneService', 'PaperlessBilling', 'SeniorCitizen' ,'Churn']
+    # SeniorCitizen ja vem como 0/1 no CSV, por isso fica fora do map Yes/No.
+    binary_cols = ['Partner', 'Dependents', 'PhoneService', 'PaperlessBilling', 'Churn']
     for col in binary_cols:
         df[col] = df[col].map({'Yes': 1, 'No': 0})
 

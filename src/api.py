@@ -10,7 +10,8 @@ from pydantic import BaseModel, Field
 from src.config import MODEL_DIR
 
 NUMERIC_COLS = ["tenure", "MonthlyCharges", "TotalCharges"]
-BINARY_COLS = ["Partner", "Dependents", "PhoneService", "PaperlessBilling", "SeniorCitizen"]
+# SeniorCitizen ja chega como 0/1, por isso fica fora do map Yes/No.
+BINARY_COLS = ["Partner", "Dependents", "PhoneService", "PaperlessBilling"]
 DUMMY_COLS = [
     "MultipleLines", "InternetService", "OnlineSecurity", "OnlineBackup",
     "DeviceProtection", "TechSupport", "StreamingTV", "StreamingMovies",
@@ -20,7 +21,7 @@ DUMMY_COLS = [
 
 class ChurnInput(BaseModel):
     gender: str = Field(..., examples=["Female"])
-    SeniorCitizen: str = Field(..., examples=["No"])
+    SeniorCitizen: int = Field(..., ge=0, le=1, examples=[0])
     Partner: str = Field(..., examples=["Yes"])
     Dependents: str = Field(..., examples=["No"])
     tenure: int = Field(..., examples=[1])
