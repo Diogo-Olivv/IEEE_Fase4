@@ -6,7 +6,7 @@ Melhorias essenciais são: rastreamento de experimentos com MLflow, disponibiliz
 
 ---
 
-## 📁 Estrutura do Projeto
+## Estrutura do Projeto
 
 ```bash
 MLOps-training/
@@ -14,16 +14,23 @@ MLOps-training/
 ├── data/                   # Arquivos de dados brutos e processados
 │   ├── processed/
 │   └── raw/
-├── models/                 # Artefatos de modelos pré-treinados e salvos
-├── notebooks/              # Notebooks Jupyter para EDA, treinamento e avaliação
-├── outputs/                # Relatórios, métricas de avaliação ou plots gerados pelo mlflow
+├── models/                 # Artefatos salvos: best_model.pkl, scaler.pkl, columns.pkl
+├── notebooks/              # Notebooks Jupyter para EDA
+├── outputs/                # Plots gerados (ROC, matrizes de confusão)
 ├── src/                    # Módulos Python principais
 │   ├── __init__.py
-│   ├── config.py
+│   ├── config.py           # Caminhos + configuração do MLflow
 │   ├── data_preprocessing.py
-│   ├── model.py
-│   └── visualization.py
-├── main.py                 # Função principal do programa
+│   ├── model.py            # Treino com tracking MLflow + seleção do melhor modelo
+│   ├── visualization.py
+│   ├── api.py              # API de inferência FastAPI
+│   └── app.py              # Interface Streamlit
+├── tests/                  # Testes pytest (preprocess, api, model)
+├── main.py                 # Pipeline end-to-end de treino
+├── Dockerfile.api          # Imagem da API
+├── Dockerfile.ui           # Imagem da UI
+├── docker-compose.yml      # Stack completa (mlflow + api + ui)
+├── Makefile                # Atalhos: train, serve, ui, test, up
 └── README.md
 ```
 
@@ -58,48 +65,103 @@ MLOps-training/
 ## Ferramentas & Bibliotecas Utilizadas
 
 - **Python 3.12**
-- **Pandas**, **NumPy**, **scikit-learn** – Processamento de dados e modelagem
-- **XGBoost** – Modelo de boosting avançado
-- **MLflow** – Rastreamento de experimentos e registro de modelos
-- **FastAPI** – API de inferência
-- **Streamlit** – Frontend opcional
-- **Docker** – Contêinerização para desenvolvimento e deploy
-- **matplotlib**, **seaborn** – Visualizações
+- **Pandas**, **NumPy**, **scikit-learn**: processamento de dados e modelagem
+- **XGBoost**: modelo de boosting
+- **MLflow**: rastreamento de experimentos e registro de modelos
+- **FastAPI**: API de inferência
+- **Streamlit**: frontend
+- **Docker**: conteinerização para desenvolvimento e deploy
+- **matplotlib**, **seaborn**: visualizações
 
 ---
 
-## Como Usar o Projeto
+## Como Rodar
+
+> Os comandos usam [`uv`](https://docs.astral.sh/uv/). Há atalhos equivalentes no `Makefile` (ex.: `make train`).
 
 ### 1. Configurar o Ambiente
 
 ```bash
-uv init
-uv sync
-source .venv/bin/activate  # No Windows: source .venv\Scripts\activate
+uv sync                    # instala dependências (runtime + dev) a partir do uv.lock
 ```
 
-### 2. Executar o Notebook Jupyter
+### 2. Treinar os Modelos (MLflow)
 
 ```bash
-jupyter notebook notebooks/EDA.ipynb
+uv run python main.py                       # treina 6 modelos, loga no MLflow, salva o melhor
+uv run python main.py --no-plot             # sem gerar o plot de ROC
+uv run python main.py --experiment my-exp   # nome de experimento customizado
 ```
 
-### 3. TODOs:
+O melhor modelo (por **ROC AUC**, métrica escolhida por o dataset ser desbalanceado)
+é salvo em `models/best_model.pkl`, junto de `scaler.pkl` e `columns.pkl`.
 
-**Rastreamento de Experimentos com MLflow**
-   - Treina múltiplos modelos
-   - Registra métricas, modelos e artefatos.
-   - Compara desempenho entre diferentes modelos.
-   - Salva o modelo com melhor desempenho
+### 3. Visualizar Experimentos no MLflow
 
-**API de Inferência (FastAPI - `src/api.py`)**
-   - Aceita entrada em JSON
-   - Pré-processa a requisição
-   - Carrega o melhor modelo
-   - Retorna a predição
+```bash
+uv run mlflow ui --backend-store-uri sqlite:///mlflow.db --port 5000
+# abre em http://localhost:5000
+```
 
-**Interface do modelo com Streamlit**
-   - Permite interagir com o modelo via interface gráfica
+### 4. Servir a API de Inferência (FastAPI)
+
+```bash
+uv run uvicorn src.api:app --reload --port 8000
+# docs interativas: http://localhost:8000/docs
+```
+
+Exemplo de requisição:
+
+```bash
+curl -X POST http://localhost:8000/predict \
+  -H "Content-Type: application/json" \
+  -d '{"gender":"Female","SeniorCitizen":0,"Partner":"Yes","Dependents":"No","tenure":1,
+       "PhoneService":"No","MultipleLines":"No phone service","InternetService":"DSL",
+       "OnlineSecurity":"No","OnlineBackup":"Yes","DeviceProtection":"No","TechSupport":"No",
+       "StreamingTV":"No","StreamingMovies":"No","Contract":"Month-to-month",
+       "PaperlessBilling":"Yes","PaymentMethod":"Electronic check",
+       "MonthlyCharges":29.85,"TotalCharges":29.85}'
+# -> {"prediction":1,"probability":0.61,"label":"Churn"}
+```
+
+Endpoints: `POST /predict`, `GET /health`, `GET /` (redireciona para `/docs`).
+
+### 5. Interface Gráfica (Streamlit)
+
+```bash
+uv run streamlit run src/app.py
+# http://localhost:8501  (configure a API_URL na sidebar se necessário)
+```
+
+### 6. Stack Completa com Docker
+
+```bash
+docker compose up --build
+# mlflow  -> http://localhost:5000
+# api     -> http://localhost:8000/docs
+# ui      -> http://localhost:8501
+```
+
+### 7. Testes
+
+```bash
+uv run pytest        # suíte completa
+uv run ruff check .  # lint
+```
+
+---
+
+## Notas Técnicas
+
+- **Data leakage (conhecido):** `preprocess_data` faz `scaler.fit_transform` sobre o
+  dataset inteiro antes do split treino/teste. É aceitável para esta entrega
+  educacional, mas em produção o scaler deveria ser ajustado **apenas no treino**
+  (idealmente dentro de um `Pipeline` do scikit-learn). _TODO._
+- **Alinhamento de features:** a API usa `reindex(columns=columns.pkl, fill_value=0)`
+  para garantir que o one-hot encoding da requisição bata exatamente com as colunas
+  vistas no treino.
+- **Tracking do MLflow:** por padrão usa SQLite (`mlflow.db`); o file store foi
+  descontinuado no MLflow 3.x. Em Docker, sobrescrito por `MLFLOW_TRACKING_URI`.
 
 ### Trabalhos Futuros
 
