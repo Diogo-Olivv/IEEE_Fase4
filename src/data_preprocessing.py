@@ -10,16 +10,16 @@ def load_data(path):
 
 def preprocess_data(df):
 
-    # Drop unrelated or identifier columns
+    # Remover Id
     df.drop('customerID', axis=1, inplace=True)
 
-    # Handle missing values
+    # 
     df['TotalCharges'] = pd.to_numeric(df['TotalCharges'], errors='coerce')
     df['TotalCharges'] = df['TotalCharges'].fillna(df['TotalCharges'].median())
 
 
     # Convert data types
-    binary_cols = ['Partner', 'Dependents', 'PhoneService', 'PaperlessBilling', 'Churn']
+    binary_cols = ['Partner', 'Dependents', 'PhoneService', 'PaperlessBilling', 'SeniorCitizen' ,'Churn']
     for col in binary_cols:
         df[col] = df[col].map({'Yes': 1, 'No': 0})
 
@@ -49,9 +49,7 @@ def preprocess_data(df):
     return X, y
 
 def log_processed_data(df, output_path='data/processed/churn-processed.csv'):
-    # Ensure directory exists
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
-    # Save to CSV
     df.to_csv(output_path, index=False)
-    print(f"✅ Processed data logged to {output_path}")
+    print(f"Processed data logged to {output_path}")
